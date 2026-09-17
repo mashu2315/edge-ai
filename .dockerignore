@@ -1,0 +1,66 @@
+# =============================================================================
+# Docker build context exclusions
+# Keeping the build context lean speeds up image builds and avoids leaking
+# secrets or heavyweight dev artefacts into the image layers.
+# =============================================================================
+
+# Node dependency trees — installed fresh inside the image
+node_modules
+frontend/node_modules
+backend/node_modules
+
+# NPM diagnostic logs
+npm-debug.log
+npm-error.log
+
+# Version control metadata
+.git
+.gitignore
+.gitattributes
+
+# Documentation (not needed at runtime)
+README.md
+docs/
+
+# Runtime log output — mounted as a host volume instead
+logs/
+*.log
+
+# Python bytecode caches
+ai-engine/__pycache__
+ai-engine/**/__pycache__
+system-agent/__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Python packaging artefacts
+ai-engine/*.egg-info
+ai-engine/dist/
+ai-engine/build/
+*.egg-info/
+
+# C++ build output — compiled inside the Docker build stage, not needed as
+# a source input from the host
+system-agent/cpp-core/build/
+
+# Environment secrets — never bake into an image
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test and coverage reports
+coverage/
+.nyc_output/
+htmlcov/
+.pytest_cache/
+ai-engine/venv/

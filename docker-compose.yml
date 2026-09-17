@@ -1,0 +1,161 @@
+version: '3.9'
+
+# =============================================================================
+# Edge AI System Intelligence Platform — Docker Compose
+# =============================================================================
+#
+# Services
+# ────────
+#  ai-engine  — Python FastAPI inference server (port 8000)
+#  backend    — Node.js Express API + telemetry orchestrator (port 5000)
+#  frontend   — React + Vite dev server (port 5173)
+#
+# Usage
+# ─────
+#  cp .env.example .env          # configure environment
+#  docker compose up --build     # first run (compiles C++ daemon, exports model)
+#  docker compose up             # subsequent runs (uses cached images)
+#  docker compose down -v        # tear down and remove volumes
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # AI Engine — Python FastAPI
+  # ---------------------------------------------------------------------------
+  ai-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+      # Cache-busting label so rebuilds pick up source changes
+      labels:
+        - "com.edgeai.service=ai-engine"
+    image: edgeai/ai-engine:latest
+    container_name: edgeai-ai-engine
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist the exported ONNX model across container restarts
+      - ./ai-engine/models:/app/models
+      - ./ai-engine/npu:/app/npu
+      - ./ai-engine/cleanup:/app/cleanup
+      - ./ai-engine/inference:/app/inference
+      - /tmp:/tmp
+      - /var/tmp:/var/tmp
+      - /home/ashutosh-maurya/.cache:/home/ashutosh-maurya/.cache
+      - /home/ashutosh-maurya/.cache:/home/appuser/.cache
+    environment:
+      - AI_ENGINE_HOST=0.0.0.0
+      - AI_ENGINE_PORT=8000
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - edgeai-net
+
+  # ---------------------------------------------------------------------------
+  # Backend — Node.js Express
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      labels:
+        - "com.edgeai.service=backend"
+    image: edgeai/backend:latest
+    container_name: edgeai-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      # Write logs to the host so they survive container restarts
+      - ./logs:/app/logs
+      - ./backend:/app
+      - /app/node_modules
+      - /tmp:/tmp
+      - /var/tmp:/var/tmp
+      - /home/ashutosh-maurya/.cache:/home/ashutosh-maurya/.cache
+      - /home/ashutosh-maurya/.cache:/home/appuser/.cache
+      - /home/ashutosh-maurya/.cache:/home/node/.cache
+    environment:
+      - NODE_ENV=production
+      # Use the Docker service name for internal DNS resolution
+      - AI_ENGINE_URL=http://ai-engine:8000
+      - BACKEND_PORT=5000
+      - BACKEND_HOST=0.0.0.0
+      - DAEMON_PATH=/system-agent/cpp-core/build/telemetry_daemon
+      - COLLECTOR_PATH=/system-agent/collector.py
+      - TELEMETRY_INTERVAL_MS=1000
+      - LOG_LEVEL=info
+      - LOG_DIR=/app/logs
+      - REMEDIATION_REQUIRE_APPROVAL=true
+      - REMEDIATION_PLAN_EXPIRY_MS=300000
+    depends_on:
+      ai-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:5000/health', r => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    # Required so the backend can read /proc/<pid> for real host metrics.
+    # The C++ telemetry daemon reads /proc/stat, /proc/meminfo, etc. which are
+    # only accessible with the host PID namespace when running in a container.
+    pid: host
+    privileged: true
+    networks:
+      - edgeai-net
+
+  # ---------------------------------------------------------------------------
+  # Frontend — React + Vite (development server)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-slim
+    container_name: edgeai-frontend
+    working_dir: /app
+    volumes:
+      # Bind-mount the source so hot-module-replacement (HMR) works during
+      # development.  node_modules is mapped to a named volume so the host
+      # filesystem tree doesn't shadow the container-installed packages.
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    # Install dependencies if not present, then start Vite with host binding
+    # so the dev server is accessible from outside the container.
+    command: >
+      sh -c "if [ ! -f node_modules/.bin/vite ]; then npm install; fi && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      # Vite reads VITE_* variables and exposes them to the browser bundle.
+      - VITE_API_URL=http://localhost:5000
+      - VITE_WS_URL=ws://localhost:5000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - edgeai-net
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Isolated node_modules for the frontend container so that host and
+  # container package trees don't collide (different OS / architectures).
+  frontend_node_modules:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # Internal bridge network; services communicate by container name (DNS).
+  edgeai-net:
+    driver: bridge

@@ -1,0 +1,12 @@
+{
+  "server": { "port": 5000, "host": "0.0.0.0" },
+  "aiEngine": { "url": "http://localhost:8000", "timeout": 10000 },
+  "telemetry": {
+    "daemonPath": "../system-agent/cpp-core/build/telemetry_daemon",
+    "collectorPath": "../system-agent/collector.py",
+    "intervalMs": 1000
+  },
+  "websocket": { "broadcastIntervalMs": 1000 },
+  "logs": { "maxBuffer": 500, "logDir": "./logs" },
+  "remediation": { "planExpiryMs": 300000, "sandboxed": true }
+}

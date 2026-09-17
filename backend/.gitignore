@@ -1,0 +1,30 @@
+# =============================================================================
+# backend/.gitignore
+# =============================================================================
+
+# Node dependency tree — restored with `npm install`
+node_modules/
+
+# Runtime log output
+logs/
+*.log
+npm-debug.log*
+npm-error.log*
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Editor artefacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output (if any transpilation step is added later)
+dist/

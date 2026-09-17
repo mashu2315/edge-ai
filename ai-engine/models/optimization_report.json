@@ -1,0 +1,32 @@
+{
+  "timestamp": 1789635128,
+  "base_model": "/app/models/anomaly_detector.onnx",
+  "validation": {
+    "path": "/app/models/anomaly_detector.onnx",
+    "exists": true,
+    "size_mb": 0.21,
+    "opset_version": 17,
+    "size_ok": true,
+    "opset_ok": true,
+    "shape_ok": true,
+    "valid": true,
+    "errors": [],
+    "input_shape": [
+      0,
+      10,
+      8
+    ]
+  },
+  "int8": {
+    "attempted": true,
+    "success": false,
+    "accuracy": {}
+  },
+  "fp16": {
+    "attempted": true,
+    "success": false
+  },
+  "best_model": "/app/models/anomaly_detector.onnx",
+  "errors": [],
+  "elapsed_s": 0.14
+}

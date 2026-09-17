@@ -1,0 +1,115 @@
+# =============================================================================
+# Dockerfile.ai — Python FastAPI AI-Engine image
+# =============================================================================
+#
+# Stage overview
+# ──────────────
+#  1. builder  — Installs Python dependencies into an isolated prefix so we
+#                can copy only the installed packages (not pip caches) to the
+#                final stage.
+#  2. runtime  — Lean image with app source, installed packages, and an
+#                optional ONNX model export step run at container start-up.
+#
+# Key design decisions
+# ────────────────────
+#  • python:3.11-slim base keeps the image small while providing a fully
+#    functional CPython 3.11 interpreter.
+#  • ONNX model export is attempted at runtime (container start) rather than
+#    build time so the image stays portable across machines that may or may
+#    not have a GPU/NPU available.
+#  • A non-root user ("appuser", uid 1001) runs the inference server for
+#    defence-in-depth.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1 — builder
+# Install Python packages into /install so we get a clean copy without the
+# pip download cache bloating the final image.
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System libs required to compile certain Python C-extension packages
+# (e.g. onnxruntime wheels sometimes need libgomp).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the requirements file first to leverage Docker layer caching.
+COPY ai-engine/requirements.txt ./requirements.txt
+
+# Install into a dedicated prefix directory; we copy this tree to the runtime
+# stage later.  Using --no-cache-dir avoids storing the wheel cache.
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# -----------------------------------------------------------------------------
+# Stage 2 — runtime
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+# Minimal runtime OS dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Security: non-root user ────────────────────────────────────────────────
+RUN groupadd --gid 1001 appgroup \
+    && useradd --uid 1001 --gid appgroup --no-create-home --shell /sbin/nologin appuser \
+    && mkdir -p /app/models \
+    && chown -R appuser:appgroup /app
+
+WORKDIR /app
+
+# Copy installed Python packages from the builder stage
+COPY --from=builder /install /usr/local
+
+# Copy the full ai-engine source tree
+COPY --chown=appuser:appgroup ai-engine/ ./
+
+# Ensure the models directory is writable so the export script can write there
+RUN chown -R appuser:appgroup /app/models
+
+# Verify npu/ and cleanup/ packages are present
+RUN python -c "import sys; sys.path.insert(0, '/app'); from npu.qnn_config import PROVIDER_PRIORITY; print('[Dockerfile] npu package OK')" && \
+    python -c "import sys; sys.path.insert(0, '/app'); from cleanup.file_classifier import TempFileClassifier; print('[Dockerfile] cleanup package OK')"
+
+# Switch to the non-root user
+USER appuser
+
+# Expose the FastAPI / uvicorn port
+EXPOSE 8000
+
+# Health-check against the FastAPI /health route
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c \
+        "import urllib.request, sys; \
+         r = urllib.request.urlopen('http://localhost:8000/health', timeout=5); \
+         sys.exit(0 if r.status == 200 else 1)" \
+    || exit 1
+
+# ---------------------------------------------------------------------------
+# Entrypoint strategy
+# ---------------------------------------------------------------------------
+# 1. If the ONNX model file does not exist (first boot or fresh volume),
+#    run export_model.py to generate + quantize it.  The --quantize flag
+#    activates INT8 static quantization which is required for Snapdragon NPU
+#    (QNN EP) inference.
+# 2. Start uvicorn regardless of whether the export succeeded — the engine
+#    falls back to rule-based analysis when no model is available.
+# ---------------------------------------------------------------------------
+CMD ["sh", "-c", \
+     "if [ ! -f /app/models/anomaly_detector.onnx ]; then \
+          echo '[ai-engine] ONNX model not found — running export...' && \
+          python models/export_model.py || \
+          echo '[ai-engine] WARNING: model export failed, starting without model'; \
+      else \
+          echo '[ai-engine] ONNX model found, skipping export'; \
+      fi && \
+      exec uvicorn inference.run_inference:app \
+          --host 0.0.0.0 \
+          --port 8000 \
+          --workers 1 \
+          --log-level info"]

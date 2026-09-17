@@ -1,0 +1,118 @@
+# =============================================================================
+# Dockerfile.backend — Multi-stage Node.js image
+# =============================================================================
+#
+# Stage overview
+# ──────────────
+#  1. cpp-builder  — Compiles the C++ telemetry daemon with cmake + g++
+#  2. node-deps    — Installs production Node.js dependencies
+#  3. runtime      — Lean final image; copies compiled daemon + backend code
+#
+# .dockerignore entries assumed (see .dockerignore at project root):
+#   node_modules, frontend/node_modules, logs/, .env, *.log,
+#   ai-engine/__pycache__, system-agent/cpp-core/build/
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1 — cpp-builder
+# Build the C++ telemetry daemon from source so the final image carries a
+# native binary rather than build tooling.
+# -----------------------------------------------------------------------------
+FROM node:20-slim AS cpp-builder
+
+# Install build essentials required to compile the C++ daemon
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        g++ \
+        python3 \
+        python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy the C++ daemon source tree
+COPY system-agent/cpp-core ./system-agent/cpp-core
+
+# Compile the daemon in Release mode, parallelising across all available cores
+RUN cmake \
+        -S system-agent/cpp-core \
+        -B system-agent/cpp-core/build \
+        -DCMAKE_BUILD_TYPE=Release \
+    && cmake \
+        --build system-agent/cpp-core/build \
+        --parallel "$(nproc)"
+
+# -----------------------------------------------------------------------------
+# Stage 2 — node-deps
+# Install only production Node.js dependencies so we avoid bundling devDeps
+# or native build tools in the final image layer.
+# -----------------------------------------------------------------------------
+FROM node:20-slim AS node-deps
+
+WORKDIR /app
+
+# Copy package manifests first to exploit Docker layer caching.
+# A code-only change won't invalidate the npm install layer.
+COPY backend/package.json backend/package-lock.json* ./
+
+RUN npm install --omit=dev --ignore-scripts \
+    && npm cache clean --force
+
+# -----------------------------------------------------------------------------
+# Stage 3 — runtime
+# Lean image that combines the compiled daemon, production deps, and app source.
+# -----------------------------------------------------------------------------
+FROM node:20-slim AS runtime
+
+# Install only the minimum runtime libraries needed to *run* native addons or
+# spawn child processes.  No compilers.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Security: run as non-root ──────────────────────────────────────────────
+# node:20-slim ships a built-in "node" user (uid 1000).  We use that.
+# We create the directories we need and hand ownership to the node user before
+# switching, so we never need sudo inside the container.
+RUN mkdir -p /app/logs \
+    && chown -R node:node /app
+
+WORKDIR /app
+
+# Copy production node_modules from the node-deps stage
+COPY --from=node-deps --chown=node:node /app/node_modules ./node_modules
+
+# Copy the compiled C++ telemetry daemon into a stable location that matches
+# the default DAEMON_PATH environment variable (../system-agent/cpp-core/build/
+# relative to backend/ becomes /system-agent/cpp-core/build/ inside the image).
+COPY --from=cpp-builder --chown=node:node \
+    /src/system-agent/cpp-core/build \
+    /system-agent/cpp-core/build
+
+# Copy the Python fallback collector so the backend can spawn it if the C++
+# daemon is unavailable.
+COPY --chown=node:node system-agent/collector.py /system-agent/collector.py
+
+# Copy backend application source
+COPY --chown=node:node backend/ ./
+
+# Switch to the non-root user for all subsequent operations
+USER node
+
+# Expose the backend API port
+EXPOSE 5000
+
+# Health-check so docker compose / orchestrators know when the service is ready
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:5000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+
+# Default environment overrides (can be overridden at runtime)
+ENV NODE_ENV=production \
+    BACKEND_PORT=5000 \
+    BACKEND_HOST=0.0.0.0 \
+    DAEMON_PATH=/system-agent/cpp-core/build/telemetry_daemon \
+    COLLECTOR_PATH=/system-agent/collector.py \
+    LOG_DIR=/app/logs
+
+CMD ["node", "app.js"]
