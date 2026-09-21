@@ -8,6 +8,8 @@
 #include <atomic>
 #include <csignal>
 #include <ctime>
+#include <string>
+#include <cstdlib>
 
 std::atomic<bool> g_running{true};
 
@@ -35,7 +37,19 @@ void buildJson(char* out, size_t maxOut, double cpu, double memUsed, double memT
         l1, l5, l15, (unsigned long long)getCurrentTimestamp(), procs);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc > 1 && std::string(argv[1]) == "run") {
+        if (argc >= 4 && std::string(argv[2]) == "--model") {
+            std::string modelPath = argv[3];
+            std::string cmd = "./scripts/run_pipeline.sh " + modelPath;
+            printf("Running pipeline for %s...\n", modelPath.c_str());
+            return system(cmd.c_str());
+        } else {
+            printf("Usage: %s run --model <path>\n", argv[0]);
+            return 1;
+        }
+    }
+
     signal(SIGTERM, sigHandler);
     signal(SIGINT, sigHandler);
     

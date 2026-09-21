@@ -1,0 +1,8 @@
+{
+  "is_npu_compatible": true,
+  "execution_provider": "QNN",
+  "latency_ms": 5.21,
+  "power_draw_w": 0.4,
+  "npu_utilization_pct": 60,
+  "unsupported_ops": []
+}

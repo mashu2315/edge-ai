@@ -1,6 +1,8 @@
 # Edge AI System Intelligence Platform
 
-> **100% Offline Edge Intelligence Platform** — High-frequency system telemetry via a native C++ daemon, on-device AI inference with ONNX Runtime & Snapdragon NPU (QNN) acceleration, intelligent temporary file cleanup with self-training machine learning, automated log anomaly detection, and human-in-the-loop remediation.
+**Designed and optimized for Snapdragon-powered HP PCs.**
+
+> **100% Offline Edge Intelligence Platform** — High-frequency system telemetry via a native C++ daemon, on-device AI inference with ONNX Runtime & Snapdragon NPU (QNN) acceleration, intelligent temporary file cleanup with machine learning, automated log anomaly detection, and human-in-the-loop remediation. All core models are validated via Qualcomm AI Hub.
 
 ---
 
@@ -289,6 +291,7 @@ EdgeAI/
 ├── README.md                            # Comprehensive project guide
 │
 ├── ai-engine/                           # Python AI Service (Port 8000)
+│   ├── ai_module/                      # Qualcomm AI Hub optimization pipeline
 │   ├── cleanup/
 │   │   ├── file_classifier.py          # AI Temp File Classifier (RandomForest + heuristics)
 │   │   └── script_generator.py         # Sandboxed Bash cleanup generator with manifest audit

@@ -146,3 +146,33 @@ export async function executeCleanup(
 }
 
 export { isMockMode };
+
+export async function runNpuOptimization(modelPath: string): Promise<import('@/types').NpuOptimizationResult> {
+  return withFallback(
+    () => client.post<import('@/types').NpuOptimizationResult>('/optimization/run', { modelPath }).then((r) => r.data),
+    () => ({
+      success: true,
+      logs: 'Mock execution log\nOptimization complete.',
+      report: {
+        original_model: { execution_provider: 'QNN', latency_ms: 15.42, is_npu_compatible: true },
+        optimized_model: { execution_provider: 'QNN', latency_ms: 5.21, is_npu_compatible: true, quantization: 'INT8' },
+        metrics: { latency_reduction_pct: 66.21, power_savings_w: 0.4 },
+        recommendation: 'Optimization successful. Deploy INT8 model to Snapdragon NPU.'
+      }
+    })
+  );
+}
+
+export async function getLatestNpuReport(): Promise<{ report: import('@/types').NpuOptimizationReport }> {
+  return withFallback(
+    () => client.get<{ report: import('@/types').NpuOptimizationReport }>('/optimization/report').then((r) => r.data),
+    () => ({
+      report: {
+        original_model: { execution_provider: 'QNN', latency_ms: 15.42, is_npu_compatible: true },
+        optimized_model: { execution_provider: 'QNN', latency_ms: 5.21, is_npu_compatible: true, quantization: 'INT8' },
+        metrics: { latency_reduction_pct: 66.21, power_savings_w: 0.4 },
+        recommendation: 'Optimization successful. Deploy INT8 model to Snapdragon NPU.'
+      }
+    })
+  );
+}

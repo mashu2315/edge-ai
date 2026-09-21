@@ -75,7 +75,7 @@ export interface MetricHistory {
   network: Array<{ time: string; in: number; out: number }>;
 }
 
-export type ViewSection = 'overview' | 'metrics' | 'logs' | 'insights' | 'processes' | 'cleanup';
+export type ViewSection = 'overview' | 'metrics' | 'logs' | 'insights' | 'processes' | 'cleanup' | 'npu-opt';
 
 export interface ConnectionStatus {
   connected: boolean;
@@ -113,3 +113,29 @@ export interface CleanupExecutionResult {
   manifest_path?: string;
 }
 
+
+export interface NpuOptimizationReport {
+  original_model: {
+    execution_provider: string;
+    latency_ms: number;
+    is_npu_compatible: boolean;
+  };
+  optimized_model: {
+    execution_provider: string;
+    latency_ms: number;
+    is_npu_compatible: boolean;
+    quantization: string;
+  };
+  metrics: {
+    latency_reduction_pct: number;
+    power_savings_w: number;
+  };
+  recommendation: string;
+}
+
+export interface NpuOptimizationResult {
+  success: boolean;
+  logs: string;
+  report?: NpuOptimizationReport;
+  message?: string;
+}

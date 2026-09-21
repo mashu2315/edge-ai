@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Trash2, Sparkles, ArrowRight } from 'lucide-react';
+import { Trash2, Sparkles, ArrowRight, Cpu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { SystemStats } from './SystemStats';
 import { NpuPowerWidget } from './NpuPowerWidget';
@@ -8,6 +8,7 @@ import { AiInsights } from './AiInsights';
 import { RemediationModal } from './RemediationModal';
 import { ProcessTable } from './ProcessTable';
 import { TempCleaner } from './TempCleaner';
+import { NpuOptimization } from './NpuOptimization';
 import { useLiveMetrics } from '@/hooks/useLiveMetrics';
 import { wsService } from '@/services/websocket';
 import type { ViewSection, AiInsight } from '@/types';
@@ -146,6 +147,30 @@ export function Dashboard() {
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
+
+              {/* Quick NPU Optimization Banner */}
+              <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800/60 bg-gradient-to-r from-blue-500/10 via-slate-900/40 to-indigo-500/10 p-5 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-3.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400">
+                    <Cpu className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-white">Snapdragon NPU Optimizer</h4>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Validate edge AI models against Snapdragon NPU constraints and automatically apply INT8 quantization.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveSection('npu-opt')}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-800/80 px-4 py-2.5 text-xs font-semibold text-blue-400 border border-slate-700/60 hover:bg-slate-700/80 hover:text-blue-300 transition-all shadow-md shrink-0"
+                >
+                  <span>Optimize Model</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           )}
 
@@ -168,6 +193,7 @@ export function Dashboard() {
 
           {activeSection === 'processes' && <ProcessTable />}
           {activeSection === 'cleanup' && <TempCleaner />}
+          {activeSection === 'npu-opt' && <NpuOptimization />}
         </div>
       </main>
 

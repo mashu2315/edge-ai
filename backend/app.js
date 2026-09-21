@@ -8,6 +8,7 @@ const systemRoutes = require('./routes/system.routes');
 const logsRoutes = require('./routes/logs.routes');
 const aiRoutes = require('./routes/ai.routes');
 const cleanupRoutes = require('./routes/cleanup.routes');
+const optimizationRoutes = require('./routes/optimization.routes');
 
 const wsService = require('./services/websocket.service');
 
@@ -24,6 +25,7 @@ app.use('/api/system', cleanupRoutes);   // mounts /api/system/cleanup/* and /ap
 app.use('/system', cleanupRoutes);       // also supports /system/cleanup/* directly
 app.use('/api/logs', logsRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/optimization', optimizationRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });

@@ -15,6 +15,7 @@ const NAV_ITEMS: Array<{ id: ViewSection; label: string; icon: typeof Activity }
   { id: 'insights', label: 'AI Insights', icon: BrainCircuit },
   { id: 'processes', label: 'Processes', icon: Activity },
   { id: 'cleanup', label: 'Temp Cleaner', icon: Trash2 },
+  { id: 'npu-opt', label: 'NPU Optimization', icon: Cpu },
 ];
 
 export function Sidebar({ activeSection, onSectionChange, connectionStatus, isMockMode }: SidebarProps) {
